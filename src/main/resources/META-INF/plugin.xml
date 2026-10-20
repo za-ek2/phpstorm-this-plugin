@@ -1,0 +1,46 @@
+<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
+<idea-plugin>
+    <!-- Unique identifier of the plugin. It should be FQN. It cannot be changed between the plugin versions. -->
+    <id>eu.zaek.phpstorm-this-plugin</id>
+
+    <!-- Public plugin name should be written in Title Case.
+         Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-name -->
+    <name>Contextual This</name>
+
+    <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
+    <vendor url="https://www.zaek.eu">za-ek</vendor>
+
+    <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
+         Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
+    <description><![CDATA[
+        Enter short description for your plugin here.<br>
+        <em>most HTML tags may be used</em>
+    ]]></description>
+
+    <!-- Product and plugin compatibility requirements.
+         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.jetbrains.php</depends>
+
+    <!-- Extension points defined by the plugin.
+         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
+    <extensions defaultExtensionNs="com.jetbrains">
+        <php.typeProvider4 implementation="eu.zaek.phpstormthisplugin.ContentThisTypeProvider"/>
+    </extensions>
+    <extensions defaultExtensionNs="com.intellij">
+        <completion.contributor
+                language="any"
+                implementationClass="eu.zaek.phpstormthisplugin.ContentThisCompletionContributor"/>
+        <!-- Регистрация сервиса настроек -->
+        <applicationService serviceImplementation="eu.zaek.phpstormthisplugin.ContentThisSettings"/>
+
+        <!-- Регистрация страницы настроек -->
+        <applicationConfigurable
+                bundle="messages.ThisPluginBundle"
+                key="settings.display.name"
+                instance="eu.zaek.phpstormthisplugin.ContentThisConfigurable"
+                id="eu.zaek.phpstormthisplugin.settings"
+                parentId="tools"/>
+    </extensions>
+
+</idea-plugin>
