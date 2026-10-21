@@ -3,6 +3,7 @@ package eu.zaek.phpstormthisplugin
 import com.intellij.codeInsight.completion.*
 import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.patterns.PlatformPatterns
+import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.ProcessingContext
 import com.jetbrains.php.PhpIndex
@@ -10,9 +11,9 @@ import com.jetbrains.php.lang.psi.elements.Function as PhpFunction
 import com.jetbrains.php.lang.psi.elements.MethodReference
 import com.jetbrains.php.lang.psi.elements.FieldReference
 import com.jetbrains.php.lang.psi.elements.Variable
-import com.jetbrains.php.lang.psi.elements.PhpTypedElement
 import com.jetbrains.php.lang.psi.elements.PhpClass
-import com.jetbrains.php.lang.psi.elements.AssignmentExpression // Импорт
+import com.jetbrains.php.lang.psi.elements.AssignmentExpression
+import com.jetbrains.php.lang.psi.elements.ParenthesizedExpression
 
 class ContentThisCompletionContributor : CompletionContributor() {
     init {
@@ -38,6 +39,7 @@ class ContentThisCompletionContributor : CompletionContributor() {
 
                     val base = memberRef.firstChild ?: return
 
+                    // Проверка контекста (только замыкания или глобальная область)
                     val enclosingFunction = PsiTreeUtil.getParentOfType(position, PhpFunction::class.java, false)
                     if (enclosingFunction != null) {
                         if (!enclosingFunction.name.isNullOrEmpty()) return
@@ -47,112 +49,89 @@ class ContentThisCompletionContributor : CompletionContributor() {
 
                     val phpIndex = PhpIndex.getInstance(project)
 
-                    // Кейс 1: Просто $this->
-                    if (base is Variable && base.name == "this") {
-                        val appClasses = phpIndex.getClassesByFQN(targetClass)
-                        addMembers(appClasses, result)
-                        return
-                    }
-
-                    // Кейс 2: Локальная переменная, созданная из $this->method()
-                    if (base is Variable && base.name != "this") {
-                        // Ищем область видимости (функцию или весь файл)
-                        val scope = PsiTreeUtil.getParentOfType(base, PhpFunction::class.java) ?: file
-
-                        // Находим ВСЕ присваивания в этой области, которые были ДО текущей позиции
-                        val assignments = PsiTreeUtil.findChildrenOfType(scope, AssignmentExpression::class.java)
-                            .filter { it.variable?.text == base.text && it.textOffset < base.textOffset }
-                            .sortedByDescending { it.textOffset } // Берем самое ближайшее сверху
-
-                        val latestAssignment = assignments.firstOrNull()
-                        if (latestAssignment != null) {
-                            var value = latestAssignment.value
-                            // Если выражение обернуто в скобки, разворачиваем
-                            if (value is com.jetbrains.php.lang.psi.elements.ParenthesizedExpression) {
-                                value = PsiTreeUtil.getChildOfType(value, MethodReference::class.java)
-                            }
-
-                            if (value is MethodReference) {
-                                val innerBase = value.firstChild
-                                if (innerBase is Variable && innerBase.name == "this") {
-                                    val methodName = value.name
-                                    if (methodName != null) {
-                                        val appClasses = phpIndex.getClassesByFQN(targetClass)
-                                        appClasses.forEach { appClass ->
-                                            var currentClass: PhpClass? = appClass
-                                            while (currentClass != null) {
-                                                val method = currentClass.methods.find { it.name == methodName }
-                                                if (method != null) {
-                                                    val returnTypes = method.type.getTypes()
-                                                    returnTypes.forEach { retTypeName ->
-                                                        val cleanRet = retTypeName.trim()
-                                                        if (cleanRet.isNotEmpty() && !cleanRet.startsWith("#") && cleanRet != "mixed") {
-                                                            val fqn = if (!cleanRet.startsWith("\\")) "\\$cleanRet" else cleanRet
-                                                            val classes = phpIndex.getClassesByFQN(fqn)
-                                                            addMembers(classes, result)
-                                                        }
-                                                    }
-                                                    break
-                                                }
-                                                currentClass = currentClass.superClass
-                                            }
-                                        }
-                                        return // Нашли и обработали, дальше не идем
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Кейс 3: Цепочка (например, $this->request()->)
-                    if (base is PhpTypedElement && base !is Variable) {
-                        var foundAny = false
-                        val baseTypes = base.type.global(project).getTypes()
-
-                        baseTypes.forEach { typeName ->
-                            val cleanType = typeName.substringBefore("|").substringBefore("?").trim()
-                            if (cleanType.isNotEmpty() && !cleanType.startsWith("#") && cleanType != "mixed" && cleanType != "void") {
-                                val fqn = if (!cleanType.startsWith("\\")) "\\$cleanType" else cleanType
-                                val classes = phpIndex.getClassesByFQN(fqn)
-                                if (classes.isNotEmpty()) {
-                                    addMembers(classes, result)
-                                    foundAny = true
-                                }
-                            }
-                        }
-
-                        if (!foundAny && base is MethodReference) {
-                            val innerBase = base.firstChild
-                            if (innerBase is Variable && innerBase.name == "this") {
-                                val methodName = base.name
-                                if (methodName != null) {
-                                    val appClasses = phpIndex.getClassesByFQN(targetClass)
-                                    appClasses.forEach { appClass ->
-                                        var currentClass: PhpClass? = appClass
-                                        while (currentClass != null) {
-                                            val method = currentClass.methods.find { it.name == methodName }
-                                            if (method != null) {
-                                                val returnTypes = method.type.getTypes()
-                                                returnTypes.forEach { retTypeName ->
-                                                    val cleanRet = retTypeName.trim()
-                                                    if (cleanRet.isNotEmpty() && !cleanRet.startsWith("#") && cleanRet != "mixed") {
-                                                        val fqn = if (!cleanRet.startsWith("\\")) "\\$cleanRet" else cleanRet
-                                                        val classes = phpIndex.getClassesByFQN(fqn)
-                                                        addMembers(classes, result)
-                                                    }
-                                                }
-                                                break
-                                            }
-                                            currentClass = currentClass.superClass
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    // Запускаем рекурсивный поиск типа для выражения слева от стрелки
+                    val classes = resolveTypeFromExpression(base, targetClass, phpIndex, mutableSetOf())
+                    if (classes.isNotEmpty()) {
+                        addMembers(classes, result)
                     }
                 }
             }
         )
+    }
+
+    /**
+     * Рекурсивно определяет тип PHP-класса для выражения.
+     * Понимает: $this, $var, $var->method(), $this->method() и т.д.
+     */
+    private fun resolveTypeFromExpression(
+        expression: PsiElement?,
+        targetClass: String,
+        phpIndex: PhpIndex,
+        visited: MutableSet<String>
+    ): List<PhpClass> {
+        if (expression == null) return emptyList()
+
+        // 1. Если это $this — возвращаем наш целевой класс
+        if (expression is Variable && expression.name == "this") {
+            return phpIndex.getClassesByFQN(targetClass).toList() // <--- ДОБАВЛЕНО .toList()
+        }
+
+        // 2. Если это локальная переменная — ищем её присваивание выше по коду
+        if (expression is Variable) {
+            val varName = expression.name
+            if (visited.contains(varName)) return emptyList() // Защита от бесконечной рекурсии
+            visited.add(varName)
+
+            val scope = PsiTreeUtil.getParentOfType(expression, PhpFunction::class.java) ?: expression.containingFile
+            val assignments = PsiTreeUtil.findChildrenOfType(scope, AssignmentExpression::class.java)
+                .filter { it.variable?.text == expression.text && it.textOffset < expression.textOffset }
+                .sortedByDescending { it.textOffset } // Берем самое ближайшее сверху
+
+            val latest = assignments.firstOrNull()
+            return if (latest != null) {
+                resolveTypeFromExpression(latest.value, targetClass, phpIndex, visited)
+            } else {
+                emptyList()
+            }
+        }
+
+        // 3. Если это вызов метода ($var->method() или $this->method())
+        if (expression is MethodReference) {
+            val methodName = expression.name ?: return emptyList()
+            val base = expression.firstChild
+
+            // Рекурсивно узнаем, какого класса база (например, для $ingExplainer->getStructure() базой будет $ingExplainer)
+            val baseClasses = resolveTypeFromExpression(base, targetClass, phpIndex, visited)
+            val result = mutableListOf<PhpClass>()
+
+            for (baseClass in baseClasses) {
+                var currentClass: PhpClass? = baseClass
+                while (currentClass != null) {
+                    val method = currentClass.methods.find { it.name == methodName }
+                    if (method != null) {
+                        val returnTypes = method.type.getTypes()
+                        returnTypes.forEach { retTypeName ->
+                            val cleanRet = retTypeName.substringBefore("|").substringBefore("?").trim()
+                            if (cleanRet.isNotEmpty() && !cleanRet.startsWith("#") && cleanRet != "mixed" && cleanRet != "void") {
+                                val fqn = if (!cleanRet.startsWith("\\")) "\\$cleanRet" else cleanRet
+                                result.addAll(phpIndex.getClassesByFQN(fqn))
+                            }
+                        }
+                        break
+                    }
+                    currentClass = currentClass.superClass
+                }
+            }
+            return result
+        }
+
+        // 4. Если выражение в скобках — разворачиваем
+        if (expression is ParenthesizedExpression) {
+            val child = PsiTreeUtil.getChildOfType(expression, PsiElement::class.java)
+            return resolveTypeFromExpression(child, targetClass, phpIndex, visited)
+        }
+
+        return emptyList()
     }
 
     private fun addMembers(classes: Collection<PhpClass>, result: CompletionResultSet) {

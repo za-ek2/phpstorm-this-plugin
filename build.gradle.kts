@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "eu.zaek"
-version = "1.1.2"
+version = "1.1.3"
 
 repositories {
     mavenCentral()
@@ -60,6 +60,11 @@ intellijPlatform {
         """.trimIndent()
 
         changeNotes = """
+            <b>1.1.3</b>
+            <ul>
+                <li><b>Improved Type Resolution:</b> The plugin now recursively resolves types for nested variable assignments.</li>
+            </ul>
+            <br>
             <b>1.1.2</b>
             <ul>
                 <li><b>Local Variables Support:</b> Added autocompletion for local variables assigned from <code>${'$'}this</code> 
