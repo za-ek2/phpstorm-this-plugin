@@ -17,7 +17,6 @@ class PhpClassChooseByNameModel(private val project: Project) : ChooseByNameMode
     override fun getNotInMessage(): String = "No matching PHP classes"
     override fun getNotFoundMessage(): String = "PHP class not found"
     override fun getCheckBoxName(): String? = null
-    override fun getCheckBoxMnemonic(): Char = 0.toChar()
 
     override fun loadInitialCheckBoxState(): Boolean = false
     override fun saveInitialCheckBoxState(state: Boolean) {}
@@ -25,18 +24,17 @@ class PhpClassChooseByNameModel(private val project: Project) : ChooseByNameMode
     override fun getHelpId(): String? = null
     override fun getSeparators(): Array<String> = emptyArray()
 
-    // Получаем только строки FQN (мгновенно)
     override fun getNames(checkboxState: Boolean): Array<String> {
-        return ReadAction.compute<Array<String>, Exception> {
+        return ReadAction.nonBlocking<Array<String>> {
             val phpIndex = PhpIndex.getInstance(project)
             phpIndex.getAllClassNames(object : PrefixMatcher("") {
                 override fun prefixMatches(name: String): Boolean = true
                 override fun cloneWithPrefix(prefix: String): PrefixMatcher = this
             })
-                .filter { !it.contains("\\vendor\\") } // Отсекаем vendor
+                .filter { !it.contains("\\vendor\\") }
                 .sorted()
                 .toTypedArray()
-        }
+        }.executeSynchronously()
     }
 
     // ВОЗВРАЩАЕМ СТРОКУ ВМЕСТО PhpClass! Никаких тяжелых PSI-объектов.

@@ -43,10 +43,6 @@ class PathMappingDialog(
         dirField.textField.document.addDocumentListener(docListener)
         classField.textField.document.addDocumentListener(docListener)
 
-        // Настройка поля директории (иконка папки)
-        @Suppress("DEPRECATION")
-        dirField.button.icon = AllIcons.Nodes.Folder
-
         dirField.addActionListener {
             val descriptor = FileChooserDescriptorFactory.createSingleFolderDescriptor()
             val file = FileChooser.chooseFile(descriptor, project, null)
@@ -59,10 +55,6 @@ class PathMappingDialog(
                 }
             }
         }
-
-        // Настройка поля класса (иконка класса)
-        @Suppress("DEPRECATION")
-        classField.button.icon = AllIcons.Nodes.Class
 
         classField.addActionListener {
             val model = PhpGotoClassModel(project)
