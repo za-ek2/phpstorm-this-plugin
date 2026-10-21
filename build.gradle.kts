@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "eu.zaek"
-version = "1.1.1"
+version = "1.1.2"
 
 repositories {
     mavenCentral()
@@ -60,6 +60,14 @@ intellijPlatform {
         """.trimIndent()
 
         changeNotes = """
+            <b>1.1.2</b>
+            <ul>
+                <li><b>Local Variables Support:</b> Added autocompletion for local variables assigned from <code>${'$'}this</code> 
+                (e.g., <code>${'$'}explainer = ${'$'}this->explainer();</code>). The plugin now correctly resolves the return type
+                 of the method and provides autocompletion for subsequent calls.
+                 </li>
+            </ul>
+            <br>
             <b>1.1.1</b>
             <ul>
                 <li>Replaced deprecated <code>ReadAction.compute</code> with modern <code>ReadAction.nonBlocking</code>.</li>

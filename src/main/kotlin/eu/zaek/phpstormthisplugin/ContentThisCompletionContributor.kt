@@ -12,6 +12,7 @@ import com.jetbrains.php.lang.psi.elements.FieldReference
 import com.jetbrains.php.lang.psi.elements.Variable
 import com.jetbrains.php.lang.psi.elements.PhpTypedElement
 import com.jetbrains.php.lang.psi.elements.PhpClass
+import com.jetbrains.php.lang.psi.elements.AssignmentExpression // Импорт
 
 class ContentThisCompletionContributor : CompletionContributor() {
     init {
@@ -26,7 +27,9 @@ class ContentThisCompletionContributor : CompletionContributor() {
                 ) {
                     val position = parameters.position
                     val project = position.project
-                    val filePath = parameters.originalFile.virtualFile?.path ?: return
+                    val file = parameters.originalFile
+
+                    val filePath = file.virtualFile?.path ?: return
                     val targetClass = ContentThisSettings.getInstance().getTargetClassForFile(filePath, project) ?: return
 
                     val methodRef = PsiTreeUtil.getParentOfType(position, MethodReference::class.java)
@@ -51,12 +54,61 @@ class ContentThisCompletionContributor : CompletionContributor() {
                         return
                     }
 
-                    // Кейс 2: Выражение слева от ->
-                    if (base is PhpTypedElement) {
+                    // Кейс 2: Локальная переменная, созданная из $this->method()
+                    if (base is Variable && base.name != "this") {
+                        // Ищем область видимости (функцию или весь файл)
+                        val scope = PsiTreeUtil.getParentOfType(base, PhpFunction::class.java) ?: file
+
+                        // Находим ВСЕ присваивания в этой области, которые были ДО текущей позиции
+                        val assignments = PsiTreeUtil.findChildrenOfType(scope, AssignmentExpression::class.java)
+                            .filter { it.variable?.text == base.text && it.textOffset < base.textOffset }
+                            .sortedByDescending { it.textOffset } // Берем самое ближайшее сверху
+
+                        val latestAssignment = assignments.firstOrNull()
+                        if (latestAssignment != null) {
+                            var value = latestAssignment.value
+                            // Если выражение обернуто в скобки, разворачиваем
+                            if (value is com.jetbrains.php.lang.psi.elements.ParenthesizedExpression) {
+                                value = PsiTreeUtil.getChildOfType(value, MethodReference::class.java)
+                            }
+
+                            if (value is MethodReference) {
+                                val innerBase = value.firstChild
+                                if (innerBase is Variable && innerBase.name == "this") {
+                                    val methodName = value.name
+                                    if (methodName != null) {
+                                        val appClasses = phpIndex.getClassesByFQN(targetClass)
+                                        appClasses.forEach { appClass ->
+                                            var currentClass: PhpClass? = appClass
+                                            while (currentClass != null) {
+                                                val method = currentClass.methods.find { it.name == methodName }
+                                                if (method != null) {
+                                                    val returnTypes = method.type.getTypes()
+                                                    returnTypes.forEach { retTypeName ->
+                                                        val cleanRet = retTypeName.trim()
+                                                        if (cleanRet.isNotEmpty() && !cleanRet.startsWith("#") && cleanRet != "mixed") {
+                                                            val fqn = if (!cleanRet.startsWith("\\")) "\\$cleanRet" else cleanRet
+                                                            val classes = phpIndex.getClassesByFQN(fqn)
+                                                            addMembers(classes, result)
+                                                        }
+                                                    }
+                                                    break
+                                                }
+                                                currentClass = currentClass.superClass
+                                            }
+                                        }
+                                        return // Нашли и обработали, дальше не идем
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Кейс 3: Цепочка (например, $this->request()->)
+                    if (base is PhpTypedElement && base !is Variable) {
                         var foundAny = false
                         val baseTypes = base.type.global(project).getTypes()
 
-                        // Пытаемся разрешить тип стандартным путем
                         baseTypes.forEach { typeName ->
                             val cleanType = typeName.substringBefore("|").substringBefore("?").trim()
                             if (cleanType.isNotEmpty() && !cleanType.startsWith("#") && cleanType != "mixed" && cleanType != "void") {
@@ -69,7 +121,6 @@ class ContentThisCompletionContributor : CompletionContributor() {
                             }
                         }
 
-                        // Ручной fallback, если PhpStorm не смог разрешить цепочку $this->method()
                         if (!foundAny && base is MethodReference) {
                             val innerBase = base.firstChild
                             if (innerBase is Variable && innerBase.name == "this") {
@@ -81,7 +132,6 @@ class ContentThisCompletionContributor : CompletionContributor() {
                                         while (currentClass != null) {
                                             val method = currentClass.methods.find { it.name == methodName }
                                             if (method != null) {
-                                                // Нашли метод, достаем его возвращаемый тип
                                                 val returnTypes = method.type.getTypes()
                                                 returnTypes.forEach { retTypeName ->
                                                     val cleanRet = retTypeName.trim()
@@ -107,7 +157,6 @@ class ContentThisCompletionContributor : CompletionContributor() {
 
     private fun addMembers(classes: Collection<PhpClass>, result: CompletionResultSet) {
         classes.forEach { phpClass ->
-            // МЕТОДЫ (с автоматическими скобками)
             phpClass.methods.forEach { method ->
                 if (!method.modifier.isPrivate && !method.modifier.isProtected) {
                     result.addElement(
@@ -117,7 +166,6 @@ class ContentThisCompletionContributor : CompletionContributor() {
                             .withInsertHandler { ctx, _ ->
                                 val document = ctx.document
                                 val tailOffset = ctx.tailOffset
-                                // Если скобок еще нет, вставляем их и ставим курсор внутрь
                                 if (tailOffset >= document.textLength || document.charsSequence[tailOffset] != '(') {
                                     document.insertString(tailOffset, "()")
                                     ctx.editor.caretModel.moveToOffset(tailOffset + 1)
@@ -126,7 +174,6 @@ class ContentThisCompletionContributor : CompletionContributor() {
                     )
                 }
             }
-            // СВОЙСТВА
             phpClass.fields.forEach { field ->
                 if (!field.modifier.isPrivate && !field.modifier.isProtected) {
                     result.addElement(

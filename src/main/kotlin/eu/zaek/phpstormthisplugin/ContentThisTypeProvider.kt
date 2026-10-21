@@ -1,6 +1,5 @@
 package eu.zaek.phpstormthisplugin
 
-import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
@@ -14,17 +13,11 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
 import com.jetbrains.php.lang.psi.resolve.types.PhpTypeProvider4
 
 class ContentThisTypeProvider : PhpTypeProvider4 {
-    private val logger = Logger.getInstance("ContentThisTypeProvider")
-
     override fun getKey(): Char = 'X'
 
-//    override fun interceptsNativeSignature(): Boolean = true
-
     override fun getType(element: PsiElement): PhpType? {
-        val settings = ContentThisSettings.getInstance()
         val project = element.project
         val filePath = element.containingFile.virtualFile?.path ?: return null
-
         val targetClass = ContentThisSettings.getInstance().getTargetClassForFile(filePath, project) ?: return null
 
         val enclosingFunction = PsiTreeUtil.getParentOfType(element, PhpFunction::class.java, false)
@@ -43,7 +36,6 @@ class ContentThisTypeProvider : PhpTypeProvider4 {
             if (base is Variable && base.name == "this") {
                 val methodName = element.name
                 if (methodName != null) {
-                    // Используем класс из настроек
                     return PhpType().add("#" + getKey() + "$targetClass::$methodName")
                 }
             }
@@ -59,7 +51,6 @@ class ContentThisTypeProvider : PhpTypeProvider4 {
         project: Project
     ): Collection<PhpNamedElement> {
         if (!expression.startsWith(getKey().toString())) return emptyList()
-
         val signature = expression.substring(1)
 
         if (signature.contains("::")) {
@@ -76,7 +67,6 @@ class ContentThisTypeProvider : PhpTypeProvider4 {
                 while (currentClass != null) {
                     val method = currentClass.methods.find { it.name == methodName }
                     if (method != null) {
-                        logger.warn("TypeProvider getBySignature: Найден метод $methodName, его тип: ${method.type}")
                         result.add(method)
                         break
                     }
