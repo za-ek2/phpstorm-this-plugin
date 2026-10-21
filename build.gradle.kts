@@ -60,6 +60,18 @@ intellijPlatform {
         """.trimIndent()
 
         changeNotes = """
+            <b>1.1.1</b>
+            <ul>
+                <li>Replaced deprecated <code>ReadAction.compute</code> with modern <code>ReadAction.nonBlocking</code>.</li>
+                <li>Fixed deprecated API usages (<code>DynamicBundle</code>, <code>ChooseByNameModel</code>, <code>ComponentWithBrowseButton</code>).</li>
+                <li>Improved future compatibility with new PhpStorm releases.</li>
+            </ul>
+            <br>
+            <b>1.1.0</b>
+            <ul>
+                <li>Removed usage of Internal API (<code>interceptsNativeSignature</code>) to comply with JetBrains Marketplace guidelines.</li>
+            </ul>
+            <br>
             <b>1.0.0</b>
             <ul>
                 <li>Initial release.</li>
