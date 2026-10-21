@@ -18,8 +18,7 @@ class ContentThisTypeProvider : PhpTypeProvider4 {
 
     override fun getKey(): Char = 'X'
 
-    // ВОЗВРАЩАЕМ ЭТО, чтобы PhpStorm спрашивал нас о методах $this->
-    override fun interceptsNativeSignature(): Boolean = true
+//    override fun interceptsNativeSignature(): Boolean = true
 
     override fun getType(element: PsiElement): PhpType? {
         val settings = ContentThisSettings.getInstance()
